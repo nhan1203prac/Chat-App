@@ -2,7 +2,6 @@ const express = require("express");
 const Conversation = require("../models/conversation");
 const Message = require("../models/messageModel");
 const verify = require("../middleware/verify");
-// const { getReceiverSocketId, io } = require("../server");
 const { getReceiverSocketId, io } =  require("../socket/socket.js");
 const router = express.Router();
 router.post("/send/:id", verify, async (req, res) => {
@@ -11,12 +10,10 @@ router.post("/send/:id", verify, async (req, res) => {
     const receiverId = req.params.id;
     const senderId = req.user._id;
 
-    // Tìm conversation giữa 2 người
     let conversation = await Conversation.findOne({
       participants: { $all: [senderId, receiverId] },
     });
 
-    // Nếu chưa có conversation → tạo mới
     if (!conversation) {
       conversation = await Conversation.create({
         participants: [senderId, receiverId],
@@ -36,17 +33,14 @@ router.post("/send/:id", verify, async (req, res) => {
 
       conversation.messages.push(newMessage._id);
 
-      // Lưu conversation + message
       await Promise.all([conversation.save(), newMessage.save()]);
 
-      // Populate senderId và receiverId của message
       await newMessage.populate([
         { path: "senderId", select: "_id fullname username profilePic" },
         { path: "receiverId", select: "_id fullname username profilePic" },
       ]);
     }
 
-    // Populate conversation giống API GET /conversations
     conversation = await Conversation.findById(conversation._id)
       .populate({ path: "participants", select: "-password" })
       .populate("groupAdmin", "-password")
@@ -74,7 +68,6 @@ router.post("/send/:id", verify, async (req, res) => {
         : null,
     };
 
-    // Gửi socket cho người nhận nếu có message
     if (newMessage) {
       const receiverSocketId = getReceiverSocketId(receiverId);
       if (receiverSocketId) {
@@ -140,20 +133,29 @@ router.post("/send-group/:groupId", verify, async (req, res) => {
     group.messages.push(newMessage._id);
     await group.save();
 
-    io.to(groupId.toString()).emit("newGroupMessage", newMessage);
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate("senderId", "-password")
+      .lean(); 
 
-    res.status(201).json(newMessage);
+    io.to(groupId.toString()).emit("newGroupMessage", populatedMessage);
+
+    res.status(201).json({ message: populatedMessage });
   } catch (err) {
     console.log("error", err.message)
     res.status(500).json({ error: "Lỗi gửi tin nhóm" });
   }
 });
 
-// messages.js
 router.get("/group/:groupId", verify, async (req, res) => {
   try {
     const groupId = req.params.groupId;
-    const group = await Conversation.findOne({ _id: groupId, isGroupChat: true }).populate("messages");
+    const group = await Conversation.findOne({ _id: groupId, isGroupChat: true }).populate({
+      path: "messages",
+      populate: [
+        { path: "senderId", select: "_id fullname username profilePic" }
+      
+      ]
+    });
     if (!group) return res.status(404).json({ error: "Không tìm thấy nhóm" });
 
     res.status(200).json(group.messages);

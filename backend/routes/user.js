@@ -43,7 +43,7 @@ router.get('/conversations', protectRoute, async (req, res) => {
     res.status(200).json(formattedConversations);
   } catch (error) {
     console.error('Lỗi khi lấy danh sách conversations:', error.message);
-    res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
+    res.status(500).json({ error: error?.data?.message });
   }
 });
 
@@ -62,7 +62,6 @@ router.get('/search', protectRoute, async (req, res) => {
   try {
     const keyword = req.query.keyword || ""; 
 
-    // Tìm user theo từ khóa, loại bỏ chính user
     const users = await User.find({
       fullname: { $regex: keyword, $options: 'i' },
       _id: { $ne: req.user._id }
@@ -78,7 +77,7 @@ router.get('/search', protectRoute, async (req, res) => {
       // Nếu chưa có conversation thì tạo mới (chỉ return object conversation, không lưu DB nếu muốn)
       if (!conversation) {
         conversation = {
-          _id: null, // chưa có id
+          _id: null, // lúc chưa có id tức là khi search user mà cuộc trò chuyện vs user này thì trả về lớp giả như này
           participants: [req.user, user],
           isGroupChat: false,
           messages: []
@@ -91,7 +90,7 @@ router.get('/search', protectRoute, async (req, res) => {
     res.status(200).json(result);
 
   } catch (error) {
-    res.status(500).json({ error: 'Lỗi máy chủ khi tìm kiếm người dùng' });
+    res.status(500).json({ error: error?.data?.message });
   }
 });
 
