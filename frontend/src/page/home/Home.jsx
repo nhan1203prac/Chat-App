@@ -4,9 +4,9 @@ import MessageContainer from '../../component/messages/MessageContainer'
 
 const Home = () => {
   return (
-    <div className='flex sm:h-[450px] md:h-[500px] rounded-lg overflow-hidden bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-lg bg-opacity-0'>
-        <Sidebar/>
-        <MessageContainer/>
+    <div className='flex w-full max-w-6xl h-[650px] rounded-xl overflow-hidden bg-gray-200 bg-clip-padding backdrop-blur-md bg-opacity-10 shadow-lg'>
+      <Sidebar />
+      <MessageContainer />
     </div>
   )
 }

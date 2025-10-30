@@ -6,16 +6,12 @@ const mongoose = require('mongoose'); // Cần import mongoose để dùng Objec
 
 const router = express.Router();
 
-// --- API Tạo Nhóm Mới ---
-// @desc Tạo cuộc trò chuyện nhóm mới
-// @route POST /api/groups/create
-// @access Private
+
 router.post('/create', protectRoute, async (req, res) => {
     // Yêu cầu: tên nhóm (groupName) và mảng id thành viên (participants)
     const { participants, groupName } = req.body;
     const creatorId = req.user._id; // Lấy ID người tạo từ middleware protectRoute
 
-    // Kiểm tra dữ liệu đầu vào
     if (!groupName || !groupName.trim()) {
         return res.status(400).json({ error: 'Tên nhóm không được để trống.' });
     }
@@ -31,12 +27,7 @@ router.post('/create', protectRoute, async (req, res) => {
          return res.status(400).json({ error: 'Danh sách thành viên chứa ID không hợp lệ.' });
     }
     
-    // Kiểm tra xem tất cả thành viên có tồn tại không (tùy chọn, có thể bỏ qua để tăng tốc độ)
-    // const usersExist = await User.countDocuments({ _id: { $in: finalParticipants } });
-    // if (usersExist !== finalParticipants.length) {
-    //     return res.status(404).json({ error: 'Một hoặc nhiều thành viên không tồn tại.' });
-    // }
-
+ 
 
     try {
         // Tạo nhóm chat mới
@@ -56,7 +47,6 @@ router.post('/create', protectRoute, async (req, res) => {
              return res.status(404).json({ error: 'Không thể tạo hoặc tìm thấy nhóm vừa tạo.' });
         }
 
-        // TODO: Gửi sự kiện socket tới các thành viên trong nhóm về nhóm mới (nếu cần)
 
         res.status(201).json(fullGroupChat); // Trả về 201 Created
     } catch (error) {
@@ -65,10 +55,7 @@ router.post('/create', protectRoute, async (req, res) => {
     }
 });
 
-// --- API Đổi Tên Nhóm ---
-// @desc Đổi tên nhóm
-// @route PUT /api/groups/rename
-// @access Private (Chỉ Admin)
+
 router.put('/rename', protectRoute, async (req, res) => {
     const { chatId, groupName } = req.body;
     const userId = req.user._id;
@@ -100,7 +87,6 @@ router.put('/rename', protectRoute, async (req, res) => {
             });
         }
 
-        // TODO: Gửi sự kiện socket tới các thành viên về việc đổi tên nhóm (nếu cần)
 
         res.status(200).json(updatedChat);
     } catch (error) {
@@ -296,4 +282,4 @@ router.put('/leave', protectRoute, async (req, res) => {
 });
 
 
-export default router;
+module.exports = router;

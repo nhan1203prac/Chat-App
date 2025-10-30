@@ -11,6 +11,7 @@ router.post("/send/:id",verify,async(req,res)=>{
         const {message} = req.body;
         const receiverId = req.params.id;
         const senderId = req.user._id
+        console.log("conversationId ",receiverId)
 
         let conversation = await Conversation.findOne({
             participants:{$all:[senderId,receiverId]}
@@ -26,7 +27,8 @@ router.post("/send/:id",verify,async(req,res)=>{
         const newMessage =  new Message({
             senderId,
             receiverId,
-            message
+            message,
+            conversationId: conversation._id,
         })
         if(newMessage)
             conversation.messages.push(newMessage._id)
@@ -67,5 +69,48 @@ router.get("/:id",verify,async(req,res)=>{
         res.status(500).json({error: "Internal server error"})
     }
 })
+
+
+router.post("/send-group/:groupId", verify, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const senderId = req.user._id;
+    const groupId = req.params.groupId;
+
+    const group = await Conversation.findOne({ _id: groupId, isGroupChat: true });
+    if (!group) return res.status(404).json({ error: "Không tìm thấy nhóm" });
+
+    const newMessage = await Message.create({
+      senderId,
+      receiverId: null,
+      message,
+      conversationId: groupId,
+    });
+
+    group.messages.push(newMessage._id);
+    await group.save();
+
+    io.to(groupId.toString()).emit("newGroupMessage", newMessage);
+
+    res.status(201).json(newMessage);
+  } catch (err) {
+    console.log("error", err.message)
+    res.status(500).json({ error: "Lỗi gửi tin nhóm" });
+  }
+});
+
+// messages.js
+router.get("/group/:groupId", verify, async (req, res) => {
+  try {
+    const groupId = req.params.groupId;
+    const group = await Conversation.findOne({ _id: groupId, isGroupChat: true }).populate("messages");
+    if (!group) return res.status(404).json({ error: "Không tìm thấy nhóm" });
+
+    res.status(200).json(group.messages);
+  } catch (err) {
+    res.status(500).json({ error: "Lỗi load tin nhắn nhóm" });
+  }
+});
+
 
 module.exports = router
