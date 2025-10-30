@@ -58,11 +58,9 @@ router.get('/', protectRoute, async (req, res) => {
   }
 });
 
-
 router.get('/search', protectRoute, async (req, res) => {
   try {
-    const keyword = req.query.keyword;
-    if (!keyword) return res.status(400).json({ error: 'Thiếu từ khóa tìm kiếm' });
+    const keyword = req.query.keyword || ""; 
 
     // Tìm user theo từ khóa, loại bỏ chính user
     const users = await User.find({
@@ -96,6 +94,7 @@ router.get('/search', protectRoute, async (req, res) => {
     res.status(500).json({ error: 'Lỗi máy chủ khi tìm kiếm người dùng' });
   }
 });
+
 
 
 module.exports = router;
