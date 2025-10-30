@@ -5,70 +5,120 @@ const verify = require("../middleware/verify");
 // const { getReceiverSocketId, io } = require("../server");
 const { getReceiverSocketId, io } =  require("../socket/socket.js");
 const router = express.Router();
+router.post("/send/:id", verify, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const receiverId = req.params.id;
+    const senderId = req.user._id;
 
-router.post("/send/:id",verify,async(req,res)=>{
-    try {
-        const {message} = req.body;
-        const receiverId = req.params.id;
-        const senderId = req.user._id
-        console.log("conversationId ",receiverId)
+    // Tìm conversation giữa 2 người
+    let conversation = await Conversation.findOne({
+      participants: { $all: [senderId, receiverId] },
+    });
 
-        let conversation = await Conversation.findOne({
-            participants:{$all:[senderId,receiverId]}
-        })
-
-       
-        
-        if(!conversation){
-            conversation = await Conversation.create({
-                participants:[senderId,receiverId]
-            })
-        }
-        const newMessage =  new Message({
-            senderId,
-            receiverId,
-            message,
-            conversationId: conversation._id,
-        })
-        if(newMessage)
-            conversation.messages.push(newMessage._id)
-
-        // await conversation.save()
-        // await newMessage.save()
-        await Promise.all([conversation.save(), newMessage.save()]);
-
-        const receiverSocketId = getReceiverSocketId(receiverId);
-		if (receiverSocketId) {
-			// io.to(<socket_id>).emit() used to send events to specific client
-			io.to(receiverSocketId).emit("newMessage", newMessage);
-		}
-
-
-        res.status(201).json(newMessage);
-    } catch (error) {
-        console.log("Error in sendMessage: ",error.message);
-        res.status(500).json({error: "Internal server error"})
+    // Nếu chưa có conversation → tạo mới
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [senderId, receiverId],
+      });
     }
-})
 
+    let newMessage = null;
 
-router.get("/:id",verify,async(req,res)=>{
-    try {
-        const userToChatId = req.params.id;
-        const senderId = req.user._id;
+    // Chỉ tạo message nếu có nội dung
+    if (message && message.trim() !== "") {
+      newMessage = new Message({
+        senderId,
+        receiverId,
+        message,
+        conversationId: conversation._id,
+      });
 
-        const conversation =await Conversation.findOne({
-            participants:{$all:[senderId,userToChatId]}
-        }).populate("messages")
-        if(!conversation)
-          return  res.status(200).json([])
-        const messages = conversation.messages
-        res.status(200).json(messages)
-    } catch (error) {
-        console.log("Error in getMessage: ",error.message);
-        res.status(500).json({error: "Internal server error"})
+      conversation.messages.push(newMessage._id);
+
+      // Lưu conversation + message
+      await Promise.all([conversation.save(), newMessage.save()]);
+
+      // Populate senderId và receiverId của message
+      await newMessage.populate([
+        { path: "senderId", select: "_id fullname username profilePic" },
+        { path: "receiverId", select: "_id fullname username profilePic" },
+      ]);
     }
-})
+
+    // Populate conversation giống API GET /conversations
+    conversation = await Conversation.findById(conversation._id)
+      .populate({ path: "participants", select: "-password" })
+      .populate("groupAdmin", "-password")
+      .populate({
+        path: "messages",
+        options: { sort: { createdAt: -1 }, limit: 1 },
+        populate: [
+          { path: "senderId", select: "_id fullname username profilePic" },
+          { path: "receiverId", select: "_id fullname username profilePic" },
+        ],
+      });
+
+    const lastMessage = conversation.messages.length > 0 ? conversation.messages[0] : null;
+
+    const formattedConversation = {
+      ...conversation.toObject(),
+      isGroup: !!conversation.isGroupChat,
+      lastMessage: lastMessage
+        ? {
+            _id: lastMessage._id,
+            senderId: lastMessage.senderId,
+            message: lastMessage.message,
+            createdAt: lastMessage.createdAt,
+          }
+        : null,
+    };
+
+    // Gửi socket cho người nhận nếu có message
+    if (newMessage) {
+      const receiverSocketId = getReceiverSocketId(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("newMessage", {
+          message: newMessage,
+          conversation: formattedConversation,
+        });
+      }
+    }
+
+    // Trả về sender
+    res.status(201).json({ message: newMessage, conversation: formattedConversation });
+  } catch (error) {
+    console.log("Error in sendMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
+router.get("/:id", verify, async (req, res) => {
+  try {
+    const userToChatId = req.params.id;
+    const senderId = req.user._id;
+
+    const conversation = await Conversation.findOne({
+      participants: { $all: [senderId, userToChatId] }
+    }).populate({
+      path: "messages",
+      populate: [
+        { path: "senderId", select: "_id fullname username profilePic" },
+        { path: "receiverId", select: "_id fullname username profilePic" }
+      ]
+    });
+
+    if (!conversation) return res.status(200).json([]);
+
+    res.status(200).json(conversation.messages);
+  } catch (error) {
+    console.log("Error in getMessage: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 
 router.post("/send-group/:groupId", verify, async (req, res) => {
