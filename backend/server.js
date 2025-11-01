@@ -14,11 +14,14 @@ const { app, server,io } = require("./socket/socket.js");
 const cookieParser = require("cookie-parser")
 dotenv.config()
 
-app.use(cors({
+app.use(
+  cors({
     origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true
-}));
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  })
+);
+
 
 // const io = new Server(server,{
 //     cors: {

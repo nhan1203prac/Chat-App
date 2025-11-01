@@ -8,16 +8,19 @@ const MessageInput = () => {
   const [message, setMessage] = useState("");
   const { selectedConversation, messages, setMessages } = useConversation();
 
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!message.trim() || !selectedConversation) return;
-
     setLoading(true);
     try {
-      const isGroupChat = selectedConversation.isGroup;
+      console.log("message ",selectedConversation)
+
+      const isGroupChat = selectedConversation.isGroupChat;
+      console.log("message input selected ",selectedConversation)
       const apiUrl = isGroupChat
         ? `/messages/send-group/${selectedConversation._id}`
-        : `/messages/send/${selectedConversation._id}`;
+        : `/messages/send/${selectedConversation.otherUser._id}`;
 
       const res = await fetch(apiUrl, {
         method: "POST",
@@ -27,8 +30,8 @@ const MessageInput = () => {
 
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-
-      setMessages([...messages, data]);
+      console.log("Data message input ",data)
+      setMessages([...messages, data.message]);
       setMessage("");
 
     } catch (error) {

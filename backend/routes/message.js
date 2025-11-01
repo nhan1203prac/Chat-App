@@ -10,10 +10,13 @@ router.post("/send/:id", verify, async (req, res) => {
     const receiverId = req.params.id;
     const senderId = req.user._id;
 
+    // tìm cuộc trò chuyện
     let conversation = await Conversation.findOne({
       participants: { $all: [senderId, receiverId] },
+      isGroupChat:false
     });
 
+    // check nếu chưa tạo thì tạo
     if (!conversation) {
       conversation = await Conversation.create({
         participants: [senderId, receiverId],
@@ -30,7 +33,7 @@ router.post("/send/:id", verify, async (req, res) => {
         message,
         conversationId: conversation._id,
       });
-
+      // đẩy id message vô messages
       conversation.messages.push(newMessage._id);
 
       await Promise.all([conversation.save(), newMessage.save()]);
@@ -40,7 +43,7 @@ router.post("/send/:id", verify, async (req, res) => {
         { path: "receiverId", select: "_id fullname username profilePic" },
       ]);
     }
-
+    // lấy thông tin conversation và mở rộng thêm cái ref
     conversation = await Conversation.findById(conversation._id)
       .populate({ path: "participants", select: "-password" })
       .populate("groupAdmin", "-password")
@@ -52,9 +55,9 @@ router.post("/send/:id", verify, async (req, res) => {
           { path: "receiverId", select: "_id fullname username profilePic" },
         ],
       });
-
+    // lấy message cuối, nhưng bên frontend k dùng thì ok hơn
     const lastMessage = conversation.messages.length > 0 ? conversation.messages[0] : null;
-
+    // config dữ liệu trả emit về client. Chú ý là định dạng này giống cái api search bên users
     const formattedConversation = {
       ...conversation.toObject(),
       isGroup: !!conversation.isGroupChat,
@@ -68,6 +71,7 @@ router.post("/send/:id", verify, async (req, res) => {
         : null,
     };
 
+    // emit cả tin nhắn vừa tạo và cả conversation vì lúc mà khi vừa search tên xong ta gửi tin nhắn thì chưa có converation nên ta thêm vô đây để client thêm vào
     if (newMessage) {
       const receiverSocketId = getReceiverSocketId(receiverId);
       if (receiverSocketId) {
@@ -87,14 +91,15 @@ router.post("/send/:id", verify, async (req, res) => {
 });
 
 
-
+// lấy conversation ra với tất cả message
 router.get("/:id", verify, async (req, res) => {
   try {
     const userToChatId = req.params.id;
     const senderId = req.user._id;
 
     const conversation = await Conversation.findOne({
-      participants: { $all: [senderId, userToChatId] }
+      participants: { $all: [senderId, userToChatId] },
+      isGroupChat:false
     }).populate({
       path: "messages",
       populate: [
@@ -113,7 +118,7 @@ router.get("/:id", verify, async (req, res) => {
 });
 
 
-
+// gửi với nhóm
 router.post("/send-group/:groupId", verify, async (req, res) => {
   try {
     const { message } = req.body;
@@ -163,6 +168,7 @@ router.get("/group/:groupId", verify, async (req, res) => {
     res.status(500).json({ error: "Lỗi load tin nhắn nhóm" });
   }
 });
+
 
 
 module.exports = router

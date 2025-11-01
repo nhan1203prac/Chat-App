@@ -14,6 +14,7 @@ const SearchInput = () => {
     try {
       const res = await fetch(`/users/search?keyword=${encodeURIComponent(search)}`);
       const data = await res.json();
+      console.log("Searc ",data)
       if (data.error) throw new Error(data.error);
 
       if (data.length > 0) {

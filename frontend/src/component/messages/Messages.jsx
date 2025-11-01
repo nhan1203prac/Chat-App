@@ -12,15 +12,15 @@ const Messages = () => {
   const getMessage = async () => {
     setLoading(true);
     try {
-      let url = selectedConversation.isGroup
+      console.log("message ".selectedConversation)
+      let url = selectedConversation.isGroupChat
         ? `/messages/group/${selectedConversation._id}`
-        : `/messages/${selectedConversation._id}`;
+        : `/messages/${selectedConversation.otherUser._id}`;
 
       const res = await fetch(url);
       const data = await res.json();
-
+      console.log("message conversation ",data)
       if (data.error) throw new Error(data.error);
-
       setMessages(Array.isArray(data) ? data : data.messages || []);
     } catch (error) {
       toast.error(error.message);
@@ -39,7 +39,6 @@ const Messages = () => {
     },100)
   },[messages])
 
-  console.log("message ",messages)
   return (
     <div className='px-4 flex-1 overflow-auto'>
       <Toaster/>

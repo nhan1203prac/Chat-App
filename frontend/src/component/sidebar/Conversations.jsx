@@ -14,25 +14,26 @@ const Conversations = () => {
       try {
         const res = await fetch('/users/conversations');
         const data = await res.json();
-        console.log("users ", data)
         if (data.error) throw new Error(data.error);
-        setConversations(data);
+        console.log("conversations ",data)
+        setConversations(data.filter(conv => conv._id !== null));
+
       } catch (error) {
         toast.error(error.message);
       } finally {
         setLoading(false);
       }
     };
-
+    console.log("inner effect ")
     getConversations();
   }, [setConversations]);
-
+  console.log("updated lại conversation ",conversations)
   return (
     <div className='py-2 flex flex-col overflow-auto'>
       {loading && <span className='loading loading-spinner mx-auto'></span>}
-      {conversations.map((conversation, index) => (
+      {conversations?.map((conversation, index) => (
         <Conversation
-          key={conversation._id}
+          key={conversation._id || `temp-${index}`}
           conversation={conversation}
           emoji={getRandomEmoji()}
           lastIdx={index === conversations.length - 1}

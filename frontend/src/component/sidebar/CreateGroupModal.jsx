@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import useConversation from '../../zustand/useConversation';
 
 const CreateGroupModal = ({ onClose }) => {
-  const [users, setUsers] = useState([]);
+const [users, setUsers] = useState([]);
 const [selectedUsers, setSelectedUsers] = useState([]);
 const [groupName, setGroupName] = useState("");
+const { conversations, setConversations } = useConversation();
 
 useEffect(() => {
   fetch("/users")
@@ -19,7 +22,8 @@ const toggleSelectUser = (id) => {
 };
 
 const handleCreateGroup = async () => {
-  const res = await fetch("/groups/create", {
+  try {
+    const res = await fetch("/groups/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -28,7 +32,18 @@ const handleCreateGroup = async () => {
     })
   });
   const data = await res.json();
-  console.log("Group created:", data);
+  if(data?.error){
+    toast.error(data.error)
+  }else{
+    // setConversations(...conversations,data)
+    toast.success("Group created")
+    console.log("Group created:", data);
+
+  }
+ 
+  } catch (error) {
+    toast.error(error.message)
+  }
 };
 
 console.log("user ",users)
