@@ -1,18 +1,99 @@
-const express = require("express")
-const verify = require("../middleware/verify");
-const User = require("../models/userModel");
-const router = express.Router()
+const express = require('express');
+const protectRoute = require('../middleware/verify.js');
+const User = require('../models/userModel.js');
+const Conversation = require('../models/conversation.js');
+const mongoose = require('mongoose');
 
-router.get("/",verify,async(req,res)=>{
-    try {
-        const loggedInUserId = req.user._id;
-        const filterUser = await User.find({_id:{$ne:loggedInUserId}}).select("-password");
+const router = express.Router();
 
-        res.status(200).json(filterUser)
-    } catch (error) {
-        console.log("Error in getUserForSidebar: ",error.message);
-        res.status(500).json({error: "Internal server error"})
-    }
-})
+router.get('/conversations', protectRoute, async (req, res) => {
+  try {
+    const loggedInUserId = req.user._id;
 
-module.exports=router
+    const conversations = await Conversation.find({ participants: loggedInUserId })
+      .sort({ updatedAt: -1 })
+      .populate({
+        path: 'participants',
+        select: '-password',
+      })
+      .populate('groupAdmin', '-password')
+      .populate({
+        path: 'messages',
+        options: { sort: { createdAt: -1 }, limit: 1 },
+      });
+
+    // Trả về conversation nguyên vẹn, chat 1-1 hay group đều giống nhau
+    const formattedConversations = conversations.map((conv) => {
+      const lastMessage = conv.messages.length > 0 ? conv.messages[0] : null;
+
+      return {
+        ...conv.toObject(), // chuyển document Mongoose thành object JS
+        isGroup: !!conv.isGroupChat,
+        lastMessage: lastMessage
+          ? {
+              _id: lastMessage._id,
+              senderId: lastMessage.senderId,
+              message: lastMessage.message,
+              createdAt: lastMessage.createdAt,
+            }
+          : null,
+      };
+    });
+
+    res.status(200).json(formattedConversations);
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách conversations:', error.message);
+    res.status(500).json({ error: error?.data?.message });
+  }
+});
+
+
+router.get('/', protectRoute, async (req, res) => {
+  try {
+    const users = await User.find({_id: { $ne: req.user._id }}).select('-password');
+
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi máy chủ khi tìm kiếm người dùng' });
+  }
+});
+
+router.get('/search', protectRoute, async (req, res) => {
+  try {
+    const keyword = req.query.keyword || ""; 
+
+    const users = await User.find({
+      fullname: { $regex: keyword, $options: 'i' },
+      _id: { $ne: req.user._id }
+    }).select('-password');
+
+    // Lấy conversation hiện tại nếu có
+    const result = await Promise.all(users.map(async (user) => {
+      let conversation = await Conversation.findOne({
+        participants: { $all: [req.user._id, user._id] },
+        isGroupChat: false
+      }).populate('participants', '-password');
+
+      // Nếu chưa có conversation thì tạo mới (chỉ return object conversation, không lưu DB nếu muốn)
+      if (!conversation) {
+        conversation = {
+          _id: null, // lúc chưa có id tức là khi search user mà cuộc trò chuyện vs user này thì trả về lớp giả như này
+          participants: [req.user, user],
+          isGroupChat: false,
+          messages: []
+        };
+      }
+
+      return conversation;
+    }));
+
+    res.status(200).json(result);
+
+  } catch (error) {
+    res.status(500).json({ error: error?.data?.message });
+  }
+});
+
+
+
+module.exports = router;

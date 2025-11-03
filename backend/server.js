@@ -1,10 +1,11 @@
 const express = require('express')
-// const app = express()
+
 const cors = require('cors')
 // const http = require('http')
 const authRoute = require("./routes/auth")
 const messageRoute = require("./routes/message")
 const userRoute = require("./routes/user")
+const groupRoutes = require("./routes/group.js")
 const connectToMongooseDB = require("./db/ConnecToDB")
 const dotenv = require("dotenv")
 // const server = http.createServer(app)
@@ -13,11 +14,14 @@ const { app, server,io } = require("./socket/socket.js");
 const cookieParser = require("cookie-parser")
 dotenv.config()
 
-app.use(cors({
+app.use(
+  cors({
     origin: "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true
-}));
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  })
+);
+
 
 // const io = new Server(server,{
 //     cors: {
@@ -51,7 +55,7 @@ app.use(cookieParser())
 app.use("/api/auth",authRoute)
 app.use("/api/messages",messageRoute)
 app.use("/api/users",userRoute)
-
+app.use('/api/groups', groupRoutes)
 server.listen(8800,()=>{
     connectToMongooseDB()
     console.log("Backend server is running!");

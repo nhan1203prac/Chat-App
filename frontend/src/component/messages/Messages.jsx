@@ -8,36 +8,42 @@ const Messages = () => {
   const [loading,setLoading] = useState(false)
   const { messages, setMessages, selectedConversation } = useConversation()
   const lastMessageRef = useRef()
-  useEffect(()=>{
-    const getMessage = async()=>{
-      setLoading(true)
-      try {
-        const res = await fetch(`/messages/${selectedConversation._id}`)
-        const data = await res.json()
-        if(data.error)
-          throw new Error(data.error)
-        setMessages(data)
-        console.log(data)
-      } catch (error) {
-        toast.error(error.message)
-      }finally{
-        setLoading(false)
+  useEffect(() => {
+  const getMessage = async () => {
+    setLoading(true);
+    try {
+      console.log("message ".selectedConversation)
+      let url = selectedConversation.isGroupChat
+        ? `/messages/group/${selectedConversation._id}`
+        : `/messages/${selectedConversation.otherUser._id}`;
 
-      }
-    }    
-    getMessage()
-  },[selectedConversation?._id, setMessages])
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log("message conversation ",data)
+      if (data.error) throw new Error(data.error);
+      setMessages(Array.isArray(data) ? data : data.messages || []);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (selectedConversation?._id) getMessage();
+}, [selectedConversation?._id, selectedConversation?.isGroup, setMessages]);
+
 
   useEffect(()=>{
     setTimeout(()=>{
       lastMessageRef.current?.scrollIntoView({behavior:"smooth"})
     },100)
   },[messages])
+
   return (
     <div className='px-4 flex-1 overflow-auto'>
       <Toaster/>
 
-      {!loading && messages.length>0 && messages.map(message=>(
+      {!loading && messages?.length>0 && messages?.map(message=>(
         <div  key={message._id} ref={lastMessageRef}>
           <Message message={message}/>
 

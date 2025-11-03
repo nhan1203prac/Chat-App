@@ -29,6 +29,12 @@ router.post("/signup",async(req,res)=>{
 
         })
         const savedUser = await newUser.save()
+        const token = jwt.sign({id:savedUser._id},process.env.JWT_SECRET,{expiresIn:"15d",})
+        res.cookie("jwt",token,{
+            maxAge: 15 * 24 * 60 * 60 * 1000,
+            httpOnly: true, 
+            sameSite: "strict", 
+    })
         const {password:hashedPassword ,...info} = savedUser._doc
         res.status(201).json(info)
     } catch (error) {

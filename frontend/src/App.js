@@ -1,4 +1,3 @@
-
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Home from './page/home/Home';
 import Login from './page/login/Login';
@@ -7,29 +6,248 @@ import { useContext, useEffect } from 'react';
 import { AuthContext } from './context/AuthContext';
 import { SocketContext } from './context/SocketContextProvider';
 import useConversation from './zustand/useConversation';
-import notificationSound from './sounds/frontend_src_assets_sounds_notification.mp3'
-function App() {
-  const {authUser} = useContext(AuthContext)
-  const {socket} = useContext(SocketContext)
-  const {messages,setMessages} = useConversation()
-  const sound = new Audio(notificationSound)
+import notificationSound from './sounds/frontend_src_assets_sounds_notification.mp3';
+import toast from 'react-hot-toast';
+import { use } from 'react';
 
-  useEffect(()=>{
-    socket?.on("newMessage",(newMessage)=>{
-      setMessages([...messages,newMessage])
-      sound.play()
-    })
-    
-    return ()=>socket?.off("newMessage")
-  },[socket,messages,setMessages])
+function App() {
+  const { authUser } = useContext(AuthContext);
+  const { socket } = useContext(SocketContext);
+  const sound = new Audio(notificationSound);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('newMessage', (newMessage) => {
+      const { selectedConversation, conversations, messages } = useConversation.getState();
+
+      console.log("new message ", newMessage.conversation);
+      console.log("current selectedConversation ", selectedConversation);
+      console.log("all conversations ", conversations);
+
+      const isCurrentChat = newMessage.message.conversationId === selectedConversation?._id;
+
+      if (isCurrentChat) {
+        useConversation.setState({
+          messages: [...messages, newMessage.message],
+        });
+      }
+
+      const isExist = conversations.find(c => c._id === newMessage.message.conversationId);
+      if (!isExist) {
+        useConversation.setState({
+          conversations: [...conversations.filter(item=>item._id !== null), newMessage.conversation],
+        });
+      }
+
+      sound.play().catch(() => {
+        console.warn("Browser chặn âm thanh tự động, cần tương tác người dùng trước khi play()");
+      });
+    });
+
+    //  Khi group mới được tạo
+    socket.on('groupCreated', (newGroup) => {
+      const { conversations } = useConversation.getState();
+      useConversation.setState({
+        conversations: [...conversations, newGroup],
+      });
+    });
+
+    //  Khi có tin nhắn nhóm
+    socket.on('newGroupMessage', (newMessage) => {
+      
+      const { selectedConversation, messages } = useConversation.getState();
+      const isCurrentGroup = newMessage.conversationId === selectedConversation?._id;
+
+      if (isCurrentGroup) {
+        useConversation.setState({
+          messages: [...messages, newMessage],
+        });
+      }
+
+      sound.play().catch(() => {});
+    });
+
+    socket.on("groupNamed", ({ chatId, newName, updatedBy }) => {
+      const { selectedConversation, conversations } = useConversation.getState();
+      console.log("groupNamed ", newName);
+
+      // Chỉ cập nhật nếu selectedConversation là chat đó
+      if (selectedConversation?._id === chatId) {
+        // Cập nhật selectedConversation và conversations cùng lúc
+        useConversation.setState({
+          selectedConversation: {
+            ...selectedConversation,
+            groupName: newName
+          },
+          conversations: conversations.map(conv =>
+            conv._id === chatId ? { ...conv, groupName: newName } : conv
+          )
+        });
+
+        // Nếu người đổi tên không phải là chính bạn thì hiện toast
+        const isNotCurrentUser = updatedBy._id !== authUser._id;
+        if (isNotCurrentUser) {
+          toast.success(`${updatedBy.username} đã đổi tên nhóm thành ${newName}`);
+        }
+      }
+    });
+    socket.on("memberLeft", ({ chatId, user ,conversation}) => {
+      const { selectedConversation, conversations } = useConversation.getState();
+
+      if (user._id === authUser._id) {
+          // useConversation.setState(state => {
+          //   const newConversations = Array.isArray(state.conversations)
+          //     ? state.conversations.filter(c => c._id !== chatId)
+          //     : [];
+
+          //   console.log("updated lại conversation", newConversations);
+
+          //   return {
+          //     conversations: newConversations,
+          //     selectedConversation: null,
+          //   };
+          // });
+          useConversation.setState({
+            conversations:Array.isArray(conversations)&&conversations.filter(item=>item._id !== chatId),
+            selectedConversation:null
+          })
+
+        // return;
+      } 
+      if(user._id !== authUser._id&&selectedConversation?._id === chatId){
+        // useConversation.setState({
+        //   selectedConversation: selectedConversation.participants.filter(item=>item._id !==user._id)
+        // })
+        useConversation.setState({
+          selectedConversation:selectedConversation?._id === chatId ? conversation : null
+        })
+      }
+      if(user._id !== authUser._id&&selectedConversation?._id !== chatId){
+        useConversation.setState({
+          conversations: conversations?.map(item=>item._id === chatId?conversation:item)
+        })
+      }
+
+
+});
+
+
+// Khi nhóm bị xóa hoàn toàn
+socket.on("groupDeleted", ({ chatId,deletedBy }) => {
+  const { selectedConversation, conversations } = useConversation.getState();
+  console.log("deleted ",chatId)
+  useConversation.setState({
+    conversations: conversations.filter(conv => conv._id !== chatId),
+    selectedConversation:
+      selectedConversation?._id === chatId ? null : selectedConversation
+  });
+  if(authUser._id !== deletedBy._id){
+
+    toast("Nhóm đã bị hủy bởi admin");
+  }
+});
+socket.on("memberRemoved", ({ conversation, userIdToRemove, updatedBy }) => {
+  const { conversations, selectedConversation } = useConversation.getState();
+
+  // Nếu user hiện tại bị kick
+  if (userIdToRemove === authUser._id) {
+    useConversation.setState({
+      conversations:
+        Array.isArray(conversations) &&
+        conversations.filter(item => item._id !== conversation._id),
+      selectedConversation: null,
+    });
+    toast(`Bạn đã bị admin kick khỏi nhóm "${conversation.groupName}"`);
+    return;
+  }
+
+  // Nếu đang mở nhóm bị thay đổi
+  if (selectedConversation?._id === conversation._id) {
+    useConversation.setState({
+      selectedConversation: {
+        ...selectedConversation,
+        participants: selectedConversation.participants.filter(
+          item => item._id !== userIdToRemove
+        ),
+      },
+    });
+  }
+  if(!selectedConversation && userIdToRemove !== authUser._id){
+    useConversation.setState({
+    conversations: conversations.map(item =>
+      item._id === conversation._id ? conversation : item
+    ),
+  });
+
+  toast(`Một thành viên đã bị kick khỏi nhóm ${conversation.groupName}`);
+  }
+  
+});
+
+
+socket.on("memberAdded", ({ conversation, userAdded,updatedBy }) => {
+  const { selectedConversation,conversations,setConversations } = useConversation.getState();
+  console.log("socket memberAdded selected ",selectedConversation)
+  console.log("socket memberAdded chatId",conversation)
+  console.log("socket memberAdded userAdded",userAdded)
+  console.log("socket memberAdded authuser",authUser)
+
+  if(!conversations){
+    conversations = []
+  }
+  if(userAdded._id === authUser._id){
+    console.log("here")
+    // useConversation.setState({
+    //   conversations: [...conversations, conversation]
+    // });
+     useConversation.setState({
+          conversations: [...conversations?.filter(item=>item._id !== null), conversation]
+        });
+    console.log("log ",conversations)
+
+  }
+  
+  if (selectedConversation?._id === conversation._id && selectedConversation?.groupAdmin._id !== authUser._id) {
+    useConversation.setState({
+      selectedConversation: {
+        ...selectedConversation,
+        participants: [...selectedConversation.participants, userAdded],
+      },
+    });
+
+    toast.success(`${userAdded.username} đã được ${updatedBy.username} thêm vào nhóm`);
+  }
+  if (selectedConversation?._id !== conversation._id && userAdded._id !== authUser._id) {
+    useConversation.setState({
+      conversations: conversations.map(item =>
+        item._id === conversation._id ? conversation : item
+      ),
+    });
+  }
+
+});
+
+
+
+    //  Cleanup
+    return () => {
+      socket.off('newMessage');
+      socket.off('newGroupMessage');
+      socket.off('groupCreated');
+      socket.off('groupNamed')
+      socket.off('memberAdded')
+      socket.off('memberRemoved')
+      socket.off('groupDeleted')
+    };
+  }, [socket]);
 
   return (
     <div className='p-4 h-screen flex items-center justify-center'>
       <Routes>
-        <Route path='/' element={authUser?<Home/>:<Navigate to="/login"/>}/>
-        <Route path='login' element={authUser? <Navigate to="/"/>:<Login/>}/>
-        <Route path='/signup' element={authUser?<Navigate to="/"/>:<SignUp/>}/>
-        
+        <Route path='/' element={authUser ? <Home /> : <Navigate to='/login' />} />
+        <Route path='/login' element={authUser ? <Navigate to='/' /> : <Login />} />
+        <Route path='/signup' element={authUser ? <Navigate to='/' /> : <SignUp />} />
       </Routes>
     </div>
   );
