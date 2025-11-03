@@ -31,7 +31,7 @@ const Conversations = () => {
   return (
     <div className='py-2 flex flex-col overflow-auto'>
       {loading && <span className='loading loading-spinner mx-auto'></span>}
-      {conversations?.map((conversation, index) => (
+      {Array.isArray(conversations) && conversations?.map((conversation, index) => (
         <Conversation
           key={conversation._id || `temp-${index}`}
           conversation={conversation}

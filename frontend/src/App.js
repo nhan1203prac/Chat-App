@@ -8,6 +8,7 @@ import { SocketContext } from './context/SocketContextProvider';
 import useConversation from './zustand/useConversation';
 import notificationSound from './sounds/frontend_src_assets_sounds_notification.mp3';
 import toast from 'react-hot-toast';
+import { use } from 'react';
 
 function App() {
   const { authUser } = useContext(AuthContext);
@@ -91,37 +92,99 @@ function App() {
         }
       }
     });
-    socket.on("memberLeftGroup", ({ chatId, user }) => {
-  const { selectedConversation, conversations } = useConversation.getState();
+    socket.on("memberLeft", ({ chatId, user ,conversation}) => {
+      const { selectedConversation, conversations } = useConversation.getState();
 
-  // Nếu bạn đang mở đúng group đó
-  if (selectedConversation?._id === chatId) {
-    toast(`${user.username} đã rời nhóm`);
-  }
+      if (user._id === authUser._id) {
+          // useConversation.setState(state => {
+          //   const newConversations = Array.isArray(state.conversations)
+          //     ? state.conversations.filter(c => c._id !== chatId)
+          //     : [];
 
-  // Nếu chính bạn bị xoá khỏi nhóm → loại group khỏi danh sách
-  if (user._id === authUser._id) {
-    useConversation.setState({
-      conversations: conversations.filter(conv => conv._id !== chatId),
-      selectedConversation:
-        selectedConversation?._id === chatId ? null : selectedConversation
-    });
-  }
+          //   console.log("updated lại conversation", newConversations);
+
+          //   return {
+          //     conversations: newConversations,
+          //     selectedConversation: null,
+          //   };
+          // });
+          useConversation.setState({
+            conversations:Array.isArray(conversations)&&conversations.filter(item=>item._id !== chatId),
+            selectedConversation:null
+          })
+
+        // return;
+      } 
+      if(user._id !== authUser._id&&selectedConversation?._id === chatId){
+        // useConversation.setState({
+        //   selectedConversation: selectedConversation.participants.filter(item=>item._id !==user._id)
+        // })
+        useConversation.setState({
+          selectedConversation:selectedConversation?._id === chatId ? conversation : null
+        })
+      }
+      if(user._id !== authUser._id&&selectedConversation?._id !== chatId){
+        useConversation.setState({
+          conversations: conversations?.map(item=>item._id === chatId?conversation:item)
+        })
+      }
+
+
 });
 
 
 // Khi nhóm bị xóa hoàn toàn
-socket.on("groupDeleted", ({ chatId }) => {
+socket.on("groupDeleted", ({ chatId,deletedBy }) => {
   const { selectedConversation, conversations } = useConversation.getState();
-
+  console.log("deleted ",chatId)
   useConversation.setState({
     conversations: conversations.filter(conv => conv._id !== chatId),
     selectedConversation:
       selectedConversation?._id === chatId ? null : selectedConversation
   });
+  if(authUser._id !== deletedBy._id){
 
-  toast("Nhóm đã bị hủy bởi admin");
+    toast("Nhóm đã bị hủy bởi admin");
+  }
 });
+socket.on("memberRemoved", ({ conversation, userIdToRemove, updatedBy }) => {
+  const { conversations, selectedConversation } = useConversation.getState();
+
+  // Nếu user hiện tại bị kick
+  if (userIdToRemove === authUser._id) {
+    useConversation.setState({
+      conversations:
+        Array.isArray(conversations) &&
+        conversations.filter(item => item._id !== conversation._id),
+      selectedConversation: null,
+    });
+    toast(`Bạn đã bị admin kick khỏi nhóm "${conversation.groupName}"`);
+    return;
+  }
+
+  // Nếu đang mở nhóm bị thay đổi
+  if (selectedConversation?._id === conversation._id) {
+    useConversation.setState({
+      selectedConversation: {
+        ...selectedConversation,
+        participants: selectedConversation.participants.filter(
+          item => item._id !== userIdToRemove
+        ),
+      },
+    });
+  }
+  if(!selectedConversation && userIdToRemove !== authUser._id){
+    useConversation.setState({
+    conversations: conversations.map(item =>
+      item._id === conversation._id ? conversation : item
+    ),
+  });
+
+  toast(`Một thành viên đã bị kick khỏi nhóm ${conversation.groupName}`);
+  }
+  
+});
+
 
 socket.on("memberAdded", ({ conversation, userAdded,updatedBy }) => {
   const { selectedConversation,conversations,setConversations } = useConversation.getState();
@@ -130,7 +193,9 @@ socket.on("memberAdded", ({ conversation, userAdded,updatedBy }) => {
   console.log("socket memberAdded userAdded",userAdded)
   console.log("socket memberAdded authuser",authUser)
 
-
+  if(!conversations){
+    conversations = []
+  }
   if(userAdded._id === authUser._id){
     console.log("here")
     // useConversation.setState({
@@ -153,7 +218,7 @@ socket.on("memberAdded", ({ conversation, userAdded,updatedBy }) => {
 
     toast.success(`${userAdded.username} đã được ${updatedBy.username} thêm vào nhóm`);
   }
-  if (!selectedConversation && userAdded._id !== authUser._id) {
+  if (selectedConversation?._id !== conversation._id && userAdded._id !== authUser._id) {
     useConversation.setState({
       conversations: conversations.map(item =>
         item._id === conversation._id ? conversation : item
@@ -172,7 +237,8 @@ socket.on("memberAdded", ({ conversation, userAdded,updatedBy }) => {
       socket.off('groupCreated');
       socket.off('groupNamed')
       socket.off('memberAdded')
-      
+      socket.off('memberRemoved')
+      socket.off('groupDeleted')
     };
   }, [socket]);
 

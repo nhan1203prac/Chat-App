@@ -152,12 +152,15 @@ router.put('/add-member', protectRoute,async(req,res)=>{
 router.put('/remove',protectRoute,async(req,res)=>{
     const {chatId,userIdToRemove} = req.body
     const adminId = req.user._id
+    console.log("chatId ",chatId)
+    console.log("userIdToRemove ",userIdToRemove)
+
     if(!chatId || !userIdToRemove){
         return res.status(400).json({error: 'Thiếu Id nhóm hoặc ID thành viên cần xóa'})
     }
-    if(!mongoose.Types.ObjectId.isValid(chatId) || mongoose.Types.ObjectId.isValid(userIdToRemove)){
-        return res.status(400).json({error: 'Id nhóm hoặc Id thành viên không hợp lệ'})
-    }
+    // if(!mongoose.Types.ObjectId.isValid(chatId) || mongoose.Types.ObjectId.isValid(userIdToRemove)){
+    //     return res.status(400).json({error: 'Id nhóm hoặc Id thành viên không hợp lệ'})
+    // }
     if(adminId.toString() === userIdToRemove){
         return res.status(400).json({error: 'Admin không thể tự xóa chính mình'})
     }
@@ -170,7 +173,7 @@ router.put('/remove',protectRoute,async(req,res)=>{
         if(!group){
             return res.status(403).json({error: 'Không tìm thấy nhóm hoặc bạn không có quyền thêm thành viên'})
         }
-        if(!group.participants.includes(userIdToAdd)){
+        if(!group.participants.includes(userIdToRemove)){
             return res.status(400).json({error: 'Người dùng này không có ở trong nhóm'})
         }
 
@@ -179,7 +182,7 @@ router.put('/remove',protectRoute,async(req,res)=>{
             {new:true}
         ).populate('participants','-password')
         .populate('groupAdmin','-password')
-        io.to(chatId).emit('memberRemoved', { chatId, userIdToRemove, updatedBy: req.user });
+        io.to(chatId).emit('memberRemoved', { conversation:chatUpdated, userIdToRemove, updatedBy: req.user });
         return res.status(200).json({chatUpdated})
     } catch (error) {
         console.log(error.message)
@@ -220,7 +223,7 @@ router.put('/leave', protectRoute, async (req, res) => {
             chatId,
             { $pull: { participants: userId } },
             { new: true }
-        );
+        ).populate('participants','-password').populate('groupAdmin','-password');
 
          if (updatedChat && updatedChat.participants.length === 0) {
              await Conversation.findByIdAndDelete(chatId);
@@ -232,7 +235,7 @@ router.put('/leave', protectRoute, async (req, res) => {
              return res.status(404).json({ error: 'Không tìm thấy nhóm sau khi cập nhật.' });
         }
 
-        io.to(chatId).emit('memberLeft', { chatId, userId, updatedBy: req.user });
+        io.to(chatId).emit('memberLeft', { chatId, user:req.user, conversation:updatedChat });
         return res.status(200).json({ message: 'Rời nhóm thành công.' });
     } catch (error) {
         console.error('Lỗi khi rời nhóm:', error.message);
@@ -246,9 +249,9 @@ router.delete('/delete',protectRoute,async(req,res)=>{
     if(!chatId){
         return res.status(400).json({error:"Thiếu id nhóm"})
     }
-    if(mongoose.Types.ObjectId.isValid(chatId)){{   
-        return res.status(400).json({error:"Id nhóm không hợp lệ"})
-    }}
+    // if(mongoose.Types.ObjectId.isValid(chatId)){{   
+    //     return res.status(400).json({error:"Id nhóm không hợp lệ"})
+    // }}
 
     try {
         const group = await Conversation.findById(chatId);

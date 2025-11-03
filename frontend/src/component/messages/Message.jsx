@@ -10,14 +10,14 @@ const Message = ({ message }) => {
 
 
 
-  const fromMe = authUser._id === message.senderId._id
+  const fromMe = authUser?._id === message?.senderId?._id
 
-  let profilePic = authUser.profilePic
+  let profilePic = authUser?.profilePic
   if (!fromMe) {
     if (selectedConversation.isGroupChat) {
       profilePic = message.senderId.profilePic
     } else {
-      profilePic = selectedConversation.otherUser.profilePic 
+      profilePic = selectedConversation?.otherUser?.profilePic 
     }
   }
 
