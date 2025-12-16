@@ -14,6 +14,8 @@ const MessageContainer = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const [showAddMember, setShowAddMember] = useState(false)
   const [availableUser,setAvailableUser] = useState()
+  const [showKickMember, setshowKickMember] = useState(false)
+  const [userInGroup, setUserInGroup] = useState()
   useEffect(() => {
     return () => setSelectedConversation(null);
   }, [setSelectedConversation]);
@@ -33,14 +35,18 @@ const MessageContainer = () => {
       const memberIds = selectedConversation.participants.map(p => p._id);
 
       const filtered = allUsers.filter(user => !memberIds.includes(user._id));
-
       setAvailableUser(filtered);
+      const userGroup = selectedConversation.participants.filter(item=>item._id !== authUser._id)
+      console.log("userGroup ",userGroup)
+      setUserInGroup(userGroup)
+      
     } catch (error) {
       console.error("Failed to fetch users:", error);
     }
   };
 
   fetchAvailableUsers();
+  
 }, [selectedConversation]);
 
 
@@ -122,21 +128,105 @@ const MessageContainer = () => {
       toast.error(error.message)
     }
   }
+  const handleLeaveGroup = async () => {
+  try {
+    const res = await fetch("/groups/leave", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ chatId: selectedConversation._id }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) return toast.error(data.error || "Rời nhóm thất bại");
+
+    // setConversations(prev => prev.filter(c => c._id !== selectedConversation._id));
+    // setSelectedConversation(null);
+
+    toast.success("Bạn đã rời nhóm thành công");
+  } catch (error) {
+    console.error("Leave group error:", error);
+    toast.error(error.message);
+  }
+};
+
+  const handleKickMember = async (userIdToRemove) => {
+  try {
+    const res = await fetch("/groups/remove", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        chatId: selectedConversation._id,
+        userIdToRemove,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) return toast.error(data.error || "Kick thành viên thất bại");
+
+    // // Cập nhật selectedConversation
+    // setSelectedConversation(data);
+
+    // // Cập nhật trong danh sách conversations
+    // setConversations(
+    //   conversations.map((conv) =>
+    //     conv._id === data._id ? data : conv
+    //   )
+    // );
+
+    toast.success("Đã kick thành viên thành công!");
+  } catch (error) {
+    console.error("Kick member error:", error);
+    toast.error(error.message);
+  }
+};
+
+const handleDeleteGroup = async () => {
+  // Hiển thị xác nhận xóa
+  const confirmDelete = window.confirm(
+    `⚠️ Bạn có chắc muốn xóa nhóm "${selectedConversation.groupName}" không?`
+  );
+  if (!confirmDelete) return; // Nếu hủy, thoát luôn
+
+  try {
+    const res = await fetch("/groups/delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ chatId: selectedConversation._id }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) return toast.error(data.error || "Xóa nhóm thất bại");
+
+    // Cập nhật danh sách và selectedConversation
+    // setConversations(prev => prev.filter(c => c._id !== selectedConversation._id));
+    // setSelectedConversation(null);
+
+    toast.success(`Nhóm "${selectedConversation.groupName}" đã được xóa thành công!`);
+  } catch (error) {
+    console.error("Delete group error:", error);
+    toast.error(error.message || "Lỗi khi xóa nhóm");
+  }
+};
+
 
   return (
     <div className="flex-1 flex flex-col bg-gray-900 text-white">
       <div
         className={`bg-gray-800 px-4 py-3 mb-2 font-bold text-lg ${
-          selectedConversation.isGroupChat
+          selectedConversation?.isGroupChat
             ? 'flex items-center justify-between'
             : ''
         }`}
       >
-        {selectedConversation.isGroupChat
-          ? `Nhóm: ${selectedConversation.groupName}`
-          : `To: ${selectedConversation.otherUser.username}`}
+        {selectedConversation?.isGroupChat
+          ? `Nhóm: ${selectedConversation?.groupName}`
+          : `To: ${selectedConversation?.otherUser?.username}`}
 
-        {selectedConversation.isGroupChat && (
+        {selectedConversation?.isGroupChat && (
           <div className="dropdown dropdown-end">
             <div
               tabIndex={0}
@@ -158,10 +248,10 @@ const MessageContainer = () => {
                   <li>
                     <a onClick={()=>setShowAddMember(true)}>Thêm thành viên</a>
                   </li>
-                  <li>
+                  <li onClick={handleDeleteGroup}>
                     <a className='text-red-400'>Xóa nhóm</a>
                   </li>
-                  <li>
+                  <li onClick={()=>setshowKickMember(true)}>
                     <a className='text-red-400'>Kick thành viên</a>
                   </li>
                   
@@ -171,7 +261,7 @@ const MessageContainer = () => {
                   {/* <li>
                     <a>Thêm thành viên</a>
                   </li> */}
-                  <li>
+                  <li onClick={()=>handleLeaveGroup()}>
                     <a className="text-red-500">Rời nhóm</a>
                   </li>
                 </>
@@ -243,6 +333,48 @@ const MessageContainer = () => {
         <button
           className="mt-3 px-3 py-1 bg-gray-600 rounded hover:bg-gray-500 w-full"
           onClick={() => setShowAddMember(false)}
+        >
+          Đóng
+        </button>
+      </div>
+    )}
+
+      {showKickMember && (
+      <div className="absolute top-20 right-10 w-96 bg-gray-800 p-4 rounded shadow-lg z-50">
+        <h3 className="text-white font-bold mb-2">Thành viên trong nhóm</h3>
+        <div className="max-h-60 overflow-y-auto">
+          {userInGroup?.length > 0 ? (
+            userInGroup.map(member => (
+              <div
+                key={member._id}
+                className="flex items-center justify-between py-2 border-b border-gray-700"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={member.profilePic || "/default-avatar.png"}
+                    alt={member.username}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                  <span className="text-white">{member.username}</span>
+                </div>
+
+                {member._id !== authUser._id && (
+                  <button
+                    className="text-red-400 hover:text-red-300"
+                    onClick={() => handleKickMember(member._id)}
+                  >
+                    Kick
+                  </button>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400">Nhóm không có thành viên</p>
+          )}
+        </div>
+        <button
+          className="mt-3 px-3 py-1 bg-gray-600 rounded hover:bg-gray-500 w-full"
+          onClick={() => setshowKickMember(false)}
         >
           Đóng
         </button>

@@ -52,6 +52,9 @@ app.use(
 app.use(express.json())
 app.use(cookieParser())
 
+// Serve static files cho uploads
+app.use('/uploads', express.static('uploads'))
+
 app.use("/api/auth",authRoute)
 app.use("/api/messages",messageRoute)
 app.use("/api/users",userRoute)

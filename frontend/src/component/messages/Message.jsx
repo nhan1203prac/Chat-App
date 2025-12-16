@@ -10,14 +10,14 @@ const Message = ({ message }) => {
 
 
 
-  const fromMe = authUser._id === message.senderId._id
+  const fromMe = authUser?._id === message?.senderId?._id
 
-  let profilePic = authUser.profilePic
+  let profilePic = authUser?.profilePic
   if (!fromMe) {
     if (selectedConversation.isGroupChat) {
       profilePic = message.senderId.profilePic
     } else {
-      profilePic = selectedConversation.otherUser.profilePic 
+      profilePic = selectedConversation?.otherUser?.profilePic 
     }
   }
 
@@ -33,8 +33,28 @@ const Message = ({ message }) => {
           <img src={profilePic} alt="user avatar" />
         </div>
       </div>
-      <div className={`chat-bubble text-white ${bubbleBgColor}`}>
-        {message.message}
+      <div className={`chat-bubble text-white ${bubbleBgColor} pb-2`}>
+        {message.image && (
+          <div className='mb-2'>
+            <img 
+              src={`http://localhost:8800${message.image}`} 
+              alt="Shared image" 
+              className='max-w-xs rounded-lg cursor-pointer hover:opacity-90'
+              onClick={() => window.open(`http://localhost:8800${message.image}`, '_blank')}
+            />
+          </div>
+        )}
+        {message.video && (
+          <div className='mb-2'>
+            <video 
+              src={`http://localhost:8800${message.video}`} 
+              className='max-w-xs rounded-lg'
+              controls
+              preload="metadata"
+            />
+          </div>
+        )}
+        {message.message && <p>{message.message}</p>}
       </div>
       <div className='chat-footer opacity-50 text-xs flex gap-1 items-center text-gray-500'>
           {selectedConversation.isGroupChat && !fromMe && (
