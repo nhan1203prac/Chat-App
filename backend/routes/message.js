@@ -3,12 +3,50 @@ const Conversation = require("../models/conversation");
 const Message = require("../models/messageModel");
 const verify = require("../middleware/verify");
 const { getReceiverSocketId, io } =  require("../socket/socket.js");
+const multer = require("multer");
+const path = require("path");
 const router = express.Router();
-router.post("/send/:id", verify, async (req, res) => {
+
+// Cấu hình multer để lưu ảnh
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Chỉ chấp nhận file ảnh hoặc video!'), false);
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB cho video
+});
+router.post("/send/:id", verify, upload.single('file'), async (req, res) => {
   try {
     const { message } = req.body;
     const receiverId = req.params.id;
     const senderId = req.user._id;
+    
+    let image = null;
+    let video = null;
+    if (req.file) {
+      const filePath = `/uploads/${req.file.filename}`;
+      if (req.file.mimetype.startsWith('image/')) {
+        image = filePath;
+      } else if (req.file.mimetype.startsWith('video/')) {
+        video = filePath;
+      }
+    }
 
     // tìm cuộc trò chuyện
     let conversation = await Conversation.findOne({
@@ -25,12 +63,14 @@ router.post("/send/:id", verify, async (req, res) => {
 
     let newMessage = null;
 
-    // Chỉ tạo message nếu có nội dung
-    if (message && message.trim() !== "") {
+    // Tạo message nếu có nội dung hoặc có ảnh/video
+    if ((message && message.trim() !== "") || image || video) {
       newMessage = new Message({
         senderId,
         receiverId,
-        message,
+        message: message || "",
+        image,
+        video,
         conversationId: conversation._id,
       });
       // đẩy id message vô messages
@@ -119,11 +159,22 @@ router.get("/:id", verify, async (req, res) => {
 
 
 // gửi với nhóm
-router.post("/send-group/:groupId", verify, async (req, res) => {
+router.post("/send-group/:groupId", verify, upload.single('file'), async (req, res) => {
   try {
     const { message } = req.body;
     const senderId = req.user._id;
     const groupId = req.params.groupId;
+    
+    let image = null;
+    let video = null;
+    if (req.file) {
+      const filePath = `/uploads/${req.file.filename}`;
+      if (req.file.mimetype.startsWith('image/')) {
+        image = filePath;
+      } else if (req.file.mimetype.startsWith('video/')) {
+        video = filePath;
+      }
+    }
 
     const group = await Conversation.findOne({ _id: groupId, isGroupChat: true });
     if (!group) return res.status(404).json({ error: "Không tìm thấy nhóm" });
@@ -131,7 +182,9 @@ router.post("/send-group/:groupId", verify, async (req, res) => {
     const newMessage = await Message.create({
       senderId,
       receiverId: null,
-      message,
+      message: message || "",
+      image,
+      video,
       conversationId: groupId,
     });
 
